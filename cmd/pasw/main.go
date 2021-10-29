@@ -42,9 +42,14 @@ func printBody(body map[string]string) string {
 }
 
 func main() {
-	var output string
+	var (
+		output         string
+		matchSubstring string
+	)
 	flag.StringVar(&output, "output", "curl", "curl/ffuf")
 	flag.StringVar(&output, "o", "curl", "curl/ffuf")
+	flag.StringVar(&matchSubstring, "match-substring", "", "only print urls matching substring")
+	flag.StringVar(&matchSubstring, "ms", "", "only print urls matching substring")
 	flag.Parse()
 
 	sc := bufio.NewScanner(os.Stdin)
@@ -162,7 +167,12 @@ func main() {
 			} else {
 				out += fmt.Sprintf(" https://%s%s\n", host, path)
 			}
-			os.Stdout.WriteString(out)
+			if matchSubstring == "" {
+				os.Stdout.WriteString(out)
+			}
+			if matchSubstring != "" && strings.Contains(out, matchSubstring) {
+				os.Stdout.WriteString(out)
+			}
 		}
 	}
 
