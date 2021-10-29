@@ -10,6 +10,37 @@ import (
 	"github.com/valyala/fastjson"
 )
 
+// Metadata describes additional endpoint information.
+type Metadata struct {
+	Methods     []string
+	ContentType string
+	Body        map[string]string
+}
+
+// NewMetadata creates a new Metadata.
+func NewMetadata() Metadata {
+	return Metadata{
+		Body: make(map[string]string),
+	}
+}
+
+func printBody(body map[string]string) string {
+	rpls := map[string]string{
+		"string":  "''",
+		"object":  "{}",
+		"array":   "[]",
+		"boolean": "false",
+		"number":  "0.0",
+		"integer": "0",
+	}
+
+	var fields []string
+	for k, v := range body {
+		fields = append(fields, fmt.Sprintf("'%s': %s", k, rpls[v]))
+	}
+	return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
+}
+
 func main() {
 	var output string
 	flag.StringVar(&output, "output", "curl", "curl/ffuf")
@@ -39,7 +70,7 @@ func main() {
 	}
 
 	var host string
-	pathMethods := make(map[string][]string)
+	pathWithMetadata := make(map[string]Metadata)
 
 	o.Visit(func(k []byte, v *fastjson.Value) {
 		switch string(k) {
@@ -48,21 +79,90 @@ func main() {
 		case "paths":
 			v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 				path := string(k) // e.g. "/v1/company/profiles/{id}"
+				pathWithMetadata[path] = NewMetadata()
+
 				v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 					method := string(k) // e.g. "get"
-					pathMethods[path] = append(pathMethods[path], method)
+					if meta, ok := pathWithMetadata[path]; ok {
+						meta.Methods = append(meta.Methods, method)
+						pathWithMetadata[path] = meta
+					}
+					if method == "post" || method == "put" {
+						v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+							switch string(k) {
+							case "produces":
+								// content type
+								// -H "Content-Type: application/json"
+								if meta, ok := pathWithMetadata[path]; ok {
+									meta.ContentType = string(v.GetStringBytes())
+									pathWithMetadata[path] = meta
+								}
+							case "parameters":
+								// iterate over body parameters
+								for _, elem := range v.GetArray() {
+									elem.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+										switch string(k) {
+										case "in":
+											// "body"
+											// only body supported atm.
+										case "required":
+											// true / false
+											// not supported atm.
+										case "schema":
+											v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+												switch string(k) {
+												case "type":
+													// "object"
+												case "properties":
+													v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+														// collect json params
+														var fieldType string
+														v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+															if string(k) == "type" {
+																fieldType = string(v.GetStringBytes())
+															}
+														})
+														// append to body proto.
+														if meta, ok := pathWithMetadata[path]; ok {
+															meta.Body[string(k)] = fieldType
+															pathWithMetadata[path] = meta
+														}
+													})
+												}
+											})
+										}
+									})
+								}
+							}
+						})
+					}
 				})
 			})
 		}
 	})
-	for path, methods := range pathMethods {
-		for _, method := range methods {
+	for path, meta := range pathWithMetadata {
+		for _, method := range meta.Methods {
+			var out string
 			if output == "ffuf" {
-				fmt.Printf("ffuf -X %s -u https://%s%s\n", strings.ToUpper(method), host, path)
-
+				out = fmt.Sprintf("ffuf -X %s", strings.ToUpper(method))
 			} else {
-				fmt.Printf("curl -X %s https://%s%s\n", strings.ToUpper(method), host, path)
+				out = fmt.Sprintf("curl -X %s", strings.ToUpper(method))
 			}
+
+			if meta.ContentType != "" {
+				out += fmt.Sprintf(" -H \"Content-Type: %s\"", meta.ContentType)
+			}
+
+			if method == "post" || method == "put" {
+				out += fmt.Sprintf(" -d %s", printBody(meta.Body))
+			}
+
+			if output == "ffuf" {
+				out += fmt.Sprintf(" -u https://%s%s\n", host, path)
+			} else {
+				out += fmt.Sprintf(" https://%s%s\n", host, path)
+			}
+			os.Stdout.WriteString(out)
 		}
 	}
 
