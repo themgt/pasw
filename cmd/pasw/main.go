@@ -64,11 +64,14 @@ func main() {
 	var (
 		output         string
 		matchSubstring string
+		matchMethod    string
 	)
 	flag.StringVar(&output, "output", "curl", "curl/ffuf")
 	flag.StringVar(&output, "o", "curl", "curl/ffuf")
-	flag.StringVar(&matchSubstring, "match-substring", "", "only print urls matching substring")
-	flag.StringVar(&matchSubstring, "ms", "", "only print urls matching substring")
+	flag.StringVar(&matchSubstring, "match-substring", "", "only print requests matching substring")
+	flag.StringVar(&matchSubstring, "ms", "", "only print requests matching substring")
+	flag.StringVar(&matchMethod, "match-method", "", "only print requests matching http method")
+	flag.StringVar(&matchMethod, "mm", "", "only print requests matching http method")
 	flag.Parse()
 
 	sc := bufio.NewScanner(os.Stdin)
@@ -203,12 +206,13 @@ func main() {
 			} else {
 				out += fmt.Sprintf(" https://%s%s%s\n", host, path, params)
 			}
-			if matchSubstring == "" {
-				os.Stdout.WriteString(out)
+			if matchSubstring != "" && !strings.Contains(out, matchSubstring) {
+				continue
 			}
-			if matchSubstring != "" && strings.Contains(out, matchSubstring) {
-				os.Stdout.WriteString(out)
+			if matchMethod != "" && method != strings.ToLower(matchMethod) {
+				continue
 			}
+			os.Stdout.WriteString(out)
 		}
 	}
 
