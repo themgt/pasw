@@ -12,19 +12,38 @@ import (
 
 // Metadata describes additional endpoint information.
 type Metadata struct {
-	Methods     []string
-	ContentType string
-	Body        map[string]string
+	Methods       []string // TODO: refactor to: Method string.
+	ContentType   string
+	ParamsIn      string            // body / query
+	ParamsType    string            // object / string / array
+	ParamsValType map[string]string // name => type
 }
 
 // NewMetadata creates a new Metadata.
 func NewMetadata() Metadata {
 	return Metadata{
-		Body: make(map[string]string),
+		ParamsValType: make(map[string]string),
 	}
 }
 
-func printBody(body map[string]string) string {
+func printQuery(body map[string]string) string {
+	rpls := map[string]string{
+		"string":  "''",
+		"object":  "{}",
+		"array":   "[]",
+		"boolean": "false",
+		"number":  "0.0",
+		"integer": "0",
+	}
+
+	var fields []string
+	for k, v := range body {
+		fields = append(fields, fmt.Sprintf("%s=%s", k, rpls[v]))
+	}
+	return fmt.Sprintf("?%s", strings.Join(fields, "&"))
+}
+
+func printObject(body map[string]string) string {
 	rpls := map[string]string{
 		"string":  "''",
 		"object":  "{}",
@@ -92,55 +111,64 @@ func main() {
 						meta.Methods = append(meta.Methods, method)
 						pathWithMetadata[path] = meta
 					}
-					if method == "post" || method == "put" {
-						v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-							switch string(k) {
-							case "produces":
-								// content type
-								// -H "Content-Type: application/json"
-								if meta, ok := pathWithMetadata[path]; ok {
-									meta.ContentType = string(v.GetStringBytes())
-									pathWithMetadata[path] = meta
-								}
-							case "parameters":
-								// iterate over body parameters
-								for _, elem := range v.GetArray() {
-									elem.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-										switch string(k) {
-										case "in":
-											// "body"
-											// only body supported atm.
-										case "required":
-											// true / false
-											// not supported atm.
-										case "schema":
-											v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-												switch string(k) {
-												case "type":
-													// "object"
-												case "properties":
+					v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+						switch string(k) {
+						case "produces":
+							// content type
+							// -H "Content-Type: application/json"
+							if meta, ok := pathWithMetadata[path]; ok {
+								meta.ContentType = string(v.GetStringBytes())
+								pathWithMetadata[path] = meta
+							}
+						case "parameters":
+							// iterate over body parameters
+							for _, elem := range v.GetArray() {
+								elem.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+									switch string(k) {
+									case "in":
+										if meta, ok := pathWithMetadata[path]; ok {
+											meta.ParamsIn = string(v.GetStringBytes())
+											pathWithMetadata[path] = meta
+										}
+									case "required":
+										// true / false
+										// not supported atm.
+									case "name":
+										// query param name
+										if meta, ok := pathWithMetadata[path]; ok {
+											meta.ParamsValType[string(k)] = "string" // FIXME: take it from case "type" below.
+											pathWithMetadata[path] = meta
+										}
+									case "type":
+										// query param name
+										// append to body proto.
+									case "schema":
+										v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+											switch string(k) {
+											case "type":
+												// "object"
+											case "properties":
+												v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
+													// collect json params
+													var fieldType string
 													v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-														// collect json params
-														var fieldType string
-														v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-															if string(k) == "type" {
-																fieldType = string(v.GetStringBytes())
-															}
-														})
-														// append to body proto.
-														if meta, ok := pathWithMetadata[path]; ok {
-															meta.Body[string(k)] = fieldType
-															pathWithMetadata[path] = meta
+														if string(k) == "type" {
+															fieldType = string(v.GetStringBytes())
 														}
 													})
-												}
-											})
-										}
-									})
-								}
+													// append to body proto.
+													if meta, ok := pathWithMetadata[path]; ok {
+														meta.ParamsValType[string(k)] = fieldType
+														pathWithMetadata[path] = meta
+													}
+												})
+											}
+										})
+									}
+								})
 							}
-						})
-					}
+						}
+					})
 				})
 			})
 		}
@@ -159,13 +187,21 @@ func main() {
 			}
 
 			if method == "post" || method == "put" {
-				out += fmt.Sprintf(" -d %s", printBody(meta.Body))
+				if meta.ParamsIn == "body" {
+					out += fmt.Sprintf(" -d %s", printObject(meta.ParamsValType))
+				}
+			}
+
+			params := ""
+			if meta.ParamsIn == "query" {
+				params = printQuery(meta.ParamsValType)
 			}
 
 			if output == "ffuf" {
-				out += fmt.Sprintf(" -u https://%s%s\n", host, path)
+
+				out += fmt.Sprintf(" -u https://%s%s%s\n", host, path, params)
 			} else {
-				out += fmt.Sprintf(" https://%s%s\n", host, path)
+				out += fmt.Sprintf(" https://%s%s%s\n", host, path, params)
 			}
 			if matchSubstring == "" {
 				os.Stdout.WriteString(out)
