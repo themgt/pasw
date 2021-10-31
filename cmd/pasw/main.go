@@ -12,16 +12,25 @@ import (
 	"git.sr.ht/~ohdude/pasw/internal/metadata"
 )
 
-func printQuery(body map[string]string) string {
-	rpls := map[string]string{
-		"string":  "''",
-		"object":  "{}",
-		"array":   "[]",
-		"boolean": "false",
-		"number":  "0.0",
-		"integer": "0",
-	}
+var rpls = map[string]string{
+	"string":  "''",
+	"object":  "{}",
+	"array":   "[]",
+	"boolean": "false",
+	"number":  "0.0",
+	"integer": "0",
+}
 
+func printFormData(body map[string]string) string {
+
+	var fields []string
+	for k, v := range body {
+		fields = append(fields, fmt.Sprintf("%s=%s", k, rpls[v]))
+	}
+	return strings.Join(fields, "&")
+}
+
+func printQuery(body map[string]string) string {
 	var fields []string
 	for k, v := range body {
 		fields = append(fields, fmt.Sprintf("%s=%s", k, rpls[v]))
@@ -30,15 +39,6 @@ func printQuery(body map[string]string) string {
 }
 
 func printObject(body map[string]string) string {
-	rpls := map[string]string{
-		"string":  "''",
-		"object":  "{}",
-		"array":   "[]",
-		"boolean": "false",
-		"number":  "0.0",
-		"integer": "0",
-	}
-
 	var fields []string
 	for k, v := range body {
 		fields = append(fields, fmt.Sprintf("'%s': %s", k, rpls[v]))
@@ -120,7 +120,17 @@ func main() {
 										fmt.Printf("incomplete query param. name: '%s', type: '%s'\n", qName, qType)
 									}
 								}
-								if obj.Get("schema") != nil && obj.Get("schema").Get("properties") != nil {
+								if in == "formData" {
+									qName := string(obj.Get("name").GetStringBytes())
+									qType := string(obj.Get("type").GetStringBytes())
+									if qName != "" && qType != "" {
+										pathWithMetadata.AddParamsValType(path, method, qName, qType)
+									} else {
+										fmt.Printf("incomplete query param. name: '%s', type: '%s'\n", qName, qType)
+									}
+								}
+
+								if in == "body" && obj.Get("schema") != nil && obj.Get("schema").Get("properties") != nil {
 									obj.Get("schema").Get("properties").GetObject().Visit(func(k []byte, v *fastjson.Value) {
 										propName := string(k)
 										propType := string(v.GetStringBytes("type"))
@@ -154,6 +164,9 @@ func main() {
 			if method == "post" || method == "put" {
 				if meta.ParamsIn == "body" {
 					out += fmt.Sprintf(" -d %s", printObject(meta.ParamsValType))
+				}
+				if meta.ParamsIn == "formData" {
+					out += fmt.Sprintf(" -d \"%s\"", printFormData(meta.ParamsValType))
 				}
 			}
 
