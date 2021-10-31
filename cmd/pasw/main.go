@@ -9,8 +9,8 @@ import (
 
 	"github.com/valyala/fastjson"
 
+	"git.sr.ht/~ohdude/pasw/internal/builder"
 	"git.sr.ht/~ohdude/pasw/internal/metadata"
-	"git.sr.ht/~ohdude/pasw/internal/print"
 )
 
 func main() {
@@ -117,43 +117,32 @@ func main() {
 	})
 	for path, methodMetadata := range pathWithMetadata.PathsMethods {
 		for method, meta := range methodMetadata {
-			var out string
-			if output == "ffuf" {
-				out = fmt.Sprintf("ffuf -X %s", strings.ToUpper(method))
-			} else {
-				out = fmt.Sprintf("curl -X %s", strings.ToUpper(method))
+			c := builder.NewCommand(output).
+				Host(pathWithMetadata.Host).
+				Method(method).
+				Path(path)
+
+			switch meta.ParamsIn {
+			case "body":
+				c.BodyParams(meta.ParamsValType)
+			case "formData":
+				c.FormParams(meta.ParamsValType)
+			case "query":
+				c.QueryParams(meta.ParamsValType)
 			}
 
 			if meta.ContentType != "" {
-				out += fmt.Sprintf(" -H \"Content-Type: %s\"", meta.ContentType)
+				c.Header("Content-Type", meta.ContentType)
 			}
 
-			if method == "post" || method == "put" {
-				if meta.ParamsIn == "body" {
-					out += fmt.Sprintf(" -d %s", print.Object(meta.ParamsValType))
-				}
-				if meta.ParamsIn == "formData" {
-					out += fmt.Sprintf(" -d \"%s\"", print.FormData(meta.ParamsValType))
-				}
-			}
-
-			params := ""
-			if meta.ParamsIn == "query" {
-				params = print.Query(meta.ParamsValType)
-			}
-
-			if output == "ffuf" {
-				out += fmt.Sprintf(" -u https://%s%s%s\n", pathWithMetadata.Host, path, params)
-			} else {
-				out += fmt.Sprintf(" https://%s%s%s\n", pathWithMetadata.Host, path, params)
-			}
-			if matchSubstring != "" && !strings.Contains(out, matchSubstring) {
+			cs := c.String()
+			if matchSubstring != "" && !strings.Contains(cs, matchSubstring) {
 				continue
 			}
 			if matchMethod != "" && method != strings.ToLower(matchMethod) {
 				continue
 			}
-			os.Stdout.WriteString(out)
+			os.Stdout.WriteString(cs)
 		}
 	}
 }
