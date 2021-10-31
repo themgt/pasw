@@ -108,22 +108,21 @@ func main() {
 						case "parameters":
 							// iterate over parameters
 							for _, elem := range v.GetArray() {
+								obj := elem.GetObject()
+								in := string(obj.Get("in").GetStringBytes())
+								pathWithMetadata.AddParamsIn(path, method, in)
+								if in == "query" {
+									qname := string(obj.Get("name").GetStringBytes())
+									qtype := string(obj.Get("type").GetStringBytes())
+									if qname != "" && qtype != "" {
+										pathWithMetadata.AddParamsValType(path, method, qname, qtype)
+									} else {
+										fmt.Printf("incomplete query param. name: '%s', type: '%s'\n", qname, qtype)
+									}
+								}
+
 								elem.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 									switch string(k) {
-									case "in":
-										// where parameters are located: body (object) or query.
-										in := string(v.GetStringBytes())
-										pathWithMetadata.AddParamsIn(path, method, in)
-									case "required":
-										// true / false
-										// not supported atm.
-									case "name":
-										// query param name.
-										val := string(k)
-										fieldType := "string" // FIXME: take it from case "type" below.
-										pathWithMetadata.AddParamsValType(path, method, val, fieldType)
-									case "type":
-										// query param type (object, string etc.)
 									case "schema":
 										v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 											switch string(k) {
