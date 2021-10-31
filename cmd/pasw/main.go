@@ -22,8 +22,8 @@ func main() {
 		matchMethod    string
 		fwdFlag        sliceflag.Flag
 	)
-	flag.StringVar(&output, "output", "curl", "curl/ffuf")
-	flag.StringVar(&output, "o", "curl", "curl/ffuf")
+	flag.StringVar(&output, "output", "curl", "")
+	flag.StringVar(&output, "o", "curl", "")
 	flag.StringVar(&matchSubstring, "match-substring", "", "")
 	flag.StringVar(&matchSubstring, "ms", "", "")
 	flag.StringVar(&matchMethod, "match-method", "", "")
@@ -70,7 +70,10 @@ func main() {
 	}
 	pathWithMetadata := metadata.New()
 	if host != "" {
-		pathWithMetadata.Host = strings.TrimSuffix(host, "/")
+		host := strings.TrimSuffix(host, "/")
+		host = strings.TrimPrefix(host, "https://")
+		host = strings.TrimPrefix(host, "http://")
+		pathWithMetadata.Host = host
 	} else {
 		pathWithMetadata.Host = string(hostVal.GetStringBytes())
 	}
