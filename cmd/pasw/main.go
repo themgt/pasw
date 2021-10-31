@@ -17,21 +17,24 @@ import (
 func main() {
 	var (
 		output         string
+		host           string
 		matchSubstring string
 		matchMethod    string
 		fwdFlag        sliceflag.Flag
 	)
 	flag.StringVar(&output, "output", "curl", "curl/ffuf")
 	flag.StringVar(&output, "o", "curl", "curl/ffuf")
-	flag.StringVar(&matchSubstring, "match-substring", "", "only print requests matching substring")
-	flag.StringVar(&matchSubstring, "ms", "", "only print requests matching substring")
-	flag.StringVar(&matchMethod, "match-method", "", "only print requests matching http method")
-	flag.StringVar(&matchMethod, "mm", "", "only print requests matching http method")
-	flag.Var(&fwdFlag, "fwd-flag", "forward flag straight to the output command")
-	flag.Var(&fwdFlag, "ff", "forward flag straight to the output command")
+	flag.StringVar(&matchSubstring, "match-substring", "", "")
+	flag.StringVar(&matchSubstring, "ms", "", "")
+	flag.StringVar(&matchMethod, "match-method", "", "")
+	flag.StringVar(&matchMethod, "mm", "", "")
+	flag.Var(&fwdFlag, "fwd-flag", "")
+	flag.Var(&fwdFlag, "ff", "")
+	flag.StringVar(&host, "host", "", "")
 	flag.Usage = func() {
 		fmt.Printf("Available flags:\n" +
 			"  -o / -output			Output format. Supported: curl (default), ffuf\n" +
+			"  -host				Specify host. Overwrites host found in swagger\n" +
 			"  -ms / -match-substring	Print only results matching substring\n" +
 			"  -mm / -match-method		Print only results matching HTTP method\n" +
 			"  -ff / -fwd-flag		Forward flag directly to results\n")
@@ -61,12 +64,16 @@ func main() {
 	}
 
 	hostVal := o.Get("host")
-	if hostVal == nil {
-		fmt.Fprintf(os.Stderr, "host key not found in swagger\n")
+	if hostVal == nil && host == "" {
+		fmt.Fprintf(os.Stderr, "host not found in swagger nor -host flag provided\n")
 		os.Exit(1)
 	}
 	pathWithMetadata := metadata.New()
-	pathWithMetadata.Host = string(hostVal.GetStringBytes())
+	if host != "" {
+		pathWithMetadata.Host = strings.TrimSuffix(host, "/")
+	} else {
+		pathWithMetadata.Host = string(hostVal.GetStringBytes())
+	}
 
 	o.Visit(func(k []byte, v *fastjson.Value) {
 		switch string(k) {
