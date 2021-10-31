@@ -24,8 +24,8 @@ type Command struct {
 const (
 	// TemplateCurl represents supported curl output format.
 	TemplateCurl = "curl"
-	// TemplateFuff represents supported fuff output format.
-	TemplateFuff = "fuff"
+	// TemplateFfuf represents supported ffuf output format.
+	TemplateFfuf = "ffuf"
 )
 
 // NewCommand creates a new command builder.
@@ -41,7 +41,7 @@ func NewCommand(template string) *Command {
 
 // Valid tells whether submitted template value is valid.
 func Valid(template string) bool {
-	return template == TemplateCurl || template == TemplateFuff
+	return template == TemplateCurl || template == TemplateFfuf
 }
 
 // Host sets host value.
@@ -121,7 +121,7 @@ func (c *Command) String() string {
 		sb.WriteString(fmt.Sprintf(" -d \"%s\"", print.FormData(c.formParams)))
 	}
 
-	if c.template == TemplateFuff {
+	if c.template == TemplateFfuf {
 		sb.WriteString(fmt.Sprintf(" -u https://%s%s%s\n", c.host, c.path, print.Query(c.queryParams)))
 	} else {
 		sb.WriteString(fmt.Sprintf(" https://%s%s%s\n", c.host, c.path, print.Query(c.queryParams)))
