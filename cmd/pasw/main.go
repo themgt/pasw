@@ -8,23 +8,9 @@ import (
 	"strings"
 
 	"github.com/valyala/fastjson"
+
+	"git.sr.ht/~ohdude/pasw/internal/metadata"
 )
-
-// Metadata describes additional endpoint information.
-type Metadata struct {
-	Methods       []string // TODO: refactor to: Method string.
-	ContentType   string
-	ParamsIn      string            // body / query
-	ParamsType    string            // object / string / array
-	ParamsValType map[string]string // name => type
-}
-
-// NewMetadata creates a new Metadata.
-func NewMetadata() Metadata {
-	return Metadata{
-		ParamsValType: make(map[string]string),
-	}
-}
 
 func printQuery(body map[string]string) string {
 	rpls := map[string]string{
@@ -96,55 +82,48 @@ func main() {
 		os.Exit(1)
 	}
 
-	var host string
-	pathWithMetadata := make(map[string]Metadata)
+	hostVal := o.Get("host")
+	if hostVal == nil {
+		fmt.Fprintf(os.Stderr, "host key not found in swagger\n")
+		os.Exit(1)
+	}
+	pathWithMetadata := metadata.New()
+	pathWithMetadata.Host = string(hostVal.GetStringBytes())
 
 	o.Visit(func(k []byte, v *fastjson.Value) {
 		switch string(k) {
-		case "host":
-			host = string(v.GetStringBytes())
 		case "paths":
 			v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 				path := string(k) // e.g. "/v1/company/profiles/{id}"
-				pathWithMetadata[path] = NewMetadata()
 
 				v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 					method := string(k) // e.g. "get"
-					if meta, ok := pathWithMetadata[path]; ok {
-						meta.Methods = append(meta.Methods, method)
-						pathWithMetadata[path] = meta
-					}
+					pathWithMetadata.AddMethod(path, method)
+
 					v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 						switch string(k) {
 						case "produces":
-							// content type
-							// -H "Content-Type: application/json"
-							if meta, ok := pathWithMetadata[path]; ok {
-								meta.ContentType = string(v.GetStringBytes())
-								pathWithMetadata[path] = meta
-							}
+							contentType := string(v.GetStringBytes())
+							pathWithMetadata.AddContentType(path, method, contentType)
 						case "parameters":
-							// iterate over body parameters
+							// iterate over parameters
 							for _, elem := range v.GetArray() {
 								elem.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 									switch string(k) {
 									case "in":
-										if meta, ok := pathWithMetadata[path]; ok {
-											meta.ParamsIn = string(v.GetStringBytes())
-											pathWithMetadata[path] = meta
-										}
+										// where parameters are located: body (object) or query.
+										in := string(v.GetStringBytes())
+										pathWithMetadata.AddParamsIn(path, method, in)
 									case "required":
 										// true / false
 										// not supported atm.
 									case "name":
-										// query param name
-										if meta, ok := pathWithMetadata[path]; ok {
-											meta.ParamsValType[string(k)] = "string" // FIXME: take it from case "type" below.
-											pathWithMetadata[path] = meta
-										}
+										// query param name.
+										val := string(k)
+										fieldType := "string" // FIXME: take it from case "type" below.
+										pathWithMetadata.AddParamsValType(path, method, val, fieldType)
 									case "type":
-										// query param name
-										// append to body proto.
+										// query param type (object, string etc.)
 									case "schema":
 										v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
 											switch string(k) {
@@ -160,10 +139,9 @@ func main() {
 														}
 													})
 													// append to body proto.
-													if meta, ok := pathWithMetadata[path]; ok {
-														meta.ParamsValType[string(k)] = fieldType
-														pathWithMetadata[path] = meta
-													}
+													val := string(k)
+													fieldType = "string" // FIXME: take it from case "type" below.
+													pathWithMetadata.AddParamsValType(path, method, val, fieldType)
 												})
 											}
 										})
@@ -176,8 +154,8 @@ func main() {
 			})
 		}
 	})
-	for path, meta := range pathWithMetadata {
-		for _, method := range meta.Methods {
+	for path, methodMetadata := range pathWithMetadata.PathsMethods {
+		for method, meta := range methodMetadata {
 			var out string
 			if output == "ffuf" {
 				out = fmt.Sprintf("ffuf -X %s", strings.ToUpper(method))
@@ -201,10 +179,9 @@ func main() {
 			}
 
 			if output == "ffuf" {
-
-				out += fmt.Sprintf(" -u https://%s%s%s\n", host, path, params)
+				out += fmt.Sprintf(" -u https://%s%s%s\n", pathWithMetadata.Host, path, params)
 			} else {
-				out += fmt.Sprintf(" https://%s%s%s\n", host, path, params)
+				out += fmt.Sprintf(" https://%s%s%s\n", pathWithMetadata.Host, path, params)
 			}
 			if matchSubstring != "" && !strings.Contains(out, matchSubstring) {
 				continue
@@ -215,5 +192,4 @@ func main() {
 			os.Stdout.WriteString(out)
 		}
 	}
-
 }
