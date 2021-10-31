@@ -11,6 +11,7 @@ import (
 
 	"git.sr.ht/~ohdude/pasw/internal/builder"
 	"git.sr.ht/~ohdude/pasw/internal/metadata"
+	"git.sr.ht/~ohdude/pasw/internal/sliceflag"
 )
 
 func main() {
@@ -18,6 +19,7 @@ func main() {
 		output         string
 		matchSubstring string
 		matchMethod    string
+		fwdFlag        sliceflag.Flag
 	)
 	flag.StringVar(&output, "output", "curl", "curl/ffuf")
 	flag.StringVar(&output, "o", "curl", "curl/ffuf")
@@ -25,6 +27,8 @@ func main() {
 	flag.StringVar(&matchSubstring, "ms", "", "only print requests matching substring")
 	flag.StringVar(&matchMethod, "match-method", "", "only print requests matching http method")
 	flag.StringVar(&matchMethod, "mm", "", "only print requests matching http method")
+	flag.Var(&fwdFlag, "fwd-flag", "forward flag straight to the output command")
+	flag.Var(&fwdFlag, "ff", "forward flag straight to the output command")
 	flag.Parse()
 
 	sc := bufio.NewScanner(os.Stdin)
@@ -121,6 +125,10 @@ func main() {
 				Host(pathWithMetadata.Host).
 				Method(method).
 				Path(path)
+
+			if fwdFlag.String() != "" {
+				c.FwdFlags(sliceflag.Unpack(fwdFlag.String()))
+			}
 
 			switch meta.ParamsIn {
 			case "body":

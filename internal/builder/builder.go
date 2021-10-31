@@ -18,6 +18,7 @@ type Command struct {
 	queryParams map[string]string
 	bodyParams  map[string]string
 	headers     []string
+	fwdFlags    []string
 }
 
 const (
@@ -91,11 +92,23 @@ func (c *Command) Header(k, v string) *Command {
 	return c
 }
 
+// FwdFlags sets flags that will be forwarded straight to the command string.
+func (c *Command) FwdFlags(f []string) *Command {
+	c.fwdFlags = append(c.fwdFlags, f...)
+	return c
+}
+
 // String builds command string representation.
 func (c *Command) String() string {
 	sb := strings.Builder{}
 	sb.WriteString(c.template)
 	sb.WriteString(fmt.Sprintf(" -X %s", c.method))
+
+	if c.fwdFlags != nil {
+		for _, flag := range c.fwdFlags {
+			sb.WriteString(" " + flag)
+		}
+	}
 	if c.headers != nil {
 		for _, header := range c.headers {
 			sb.WriteString(fmt.Sprintf(" -H %s", header))
