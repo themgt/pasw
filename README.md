@@ -18,6 +18,14 @@ cd pasw
 make
 ```
 
+## Auxiliary tools 
+
+pasw works better with flattened swagger structure.
+In order to do so install swagger tool from goswagger.io and execute:
+```
+$ swagger flatten --with-expand -o swagger_flat.json swagger.json
+```
+
 ## Usage
 
 ```
