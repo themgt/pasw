@@ -10,41 +10,8 @@ import (
 	"github.com/valyala/fastjson"
 
 	"git.sr.ht/~ohdude/pasw/internal/metadata"
+	"git.sr.ht/~ohdude/pasw/internal/print"
 )
-
-var rpls = map[string]string{
-	"string":  "''",
-	"object":  "{}",
-	"array":   "[]",
-	"boolean": "false",
-	"number":  "0.0",
-	"integer": "0",
-}
-
-func printFormData(body map[string]string) string {
-
-	var fields []string
-	for k, v := range body {
-		fields = append(fields, fmt.Sprintf("%s=%s", k, rpls[v]))
-	}
-	return strings.Join(fields, "&")
-}
-
-func printQuery(body map[string]string) string {
-	var fields []string
-	for k, v := range body {
-		fields = append(fields, fmt.Sprintf("%s=%s", k, rpls[v]))
-	}
-	return fmt.Sprintf("?%s", strings.Join(fields, "&"))
-}
-
-func printObject(body map[string]string) string {
-	var fields []string
-	for k, v := range body {
-		fields = append(fields, fmt.Sprintf("'%s': %s", k, rpls[v]))
-	}
-	return fmt.Sprintf("{%s}", strings.Join(fields, ", "))
-}
 
 func main() {
 	var (
@@ -163,16 +130,16 @@ func main() {
 
 			if method == "post" || method == "put" {
 				if meta.ParamsIn == "body" {
-					out += fmt.Sprintf(" -d %s", printObject(meta.ParamsValType))
+					out += fmt.Sprintf(" -d %s", print.Object(meta.ParamsValType))
 				}
 				if meta.ParamsIn == "formData" {
-					out += fmt.Sprintf(" -d \"%s\"", printFormData(meta.ParamsValType))
+					out += fmt.Sprintf(" -d \"%s\"", print.FormData(meta.ParamsValType))
 				}
 			}
 
 			params := ""
 			if meta.ParamsIn == "query" {
-				params = printQuery(meta.ParamsValType)
+				params = print.Query(meta.ParamsValType)
 			}
 
 			if output == "ffuf" {
