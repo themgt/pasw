@@ -106,46 +106,31 @@ func main() {
 							contentType := string(v.GetStringBytes())
 							pathWithMetadata.AddContentType(path, method, contentType)
 						case "parameters":
-							// iterate over parameters
 							for _, elem := range v.GetArray() {
 								obj := elem.GetObject()
 								in := string(obj.Get("in").GetStringBytes())
 								pathWithMetadata.AddParamsIn(path, method, in)
+
 								if in == "query" {
-									qname := string(obj.Get("name").GetStringBytes())
-									qtype := string(obj.Get("type").GetStringBytes())
-									if qname != "" && qtype != "" {
-										pathWithMetadata.AddParamsValType(path, method, qname, qtype)
+									qName := string(obj.Get("name").GetStringBytes())
+									qType := string(obj.Get("type").GetStringBytes())
+									if qName != "" && qType != "" {
+										pathWithMetadata.AddParamsValType(path, method, qName, qType)
 									} else {
-										fmt.Printf("incomplete query param. name: '%s', type: '%s'\n", qname, qtype)
+										fmt.Printf("incomplete query param. name: '%s', type: '%s'\n", qName, qType)
 									}
 								}
-
-								elem.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-									switch string(k) {
-									case "schema":
-										v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-											switch string(k) {
-											case "type":
-												// "object"
-											case "properties":
-												v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-													// collect json params
-													var fieldType string
-													v.GetObject().Visit(func(k []byte, v *fastjson.Value) {
-														if string(k) == "type" {
-															fieldType = string(v.GetStringBytes())
-														}
-													})
-													// append to body proto.
-													val := string(k)
-													fieldType = "string" // FIXME: take it from case "type" below.
-													pathWithMetadata.AddParamsValType(path, method, val, fieldType)
-												})
-											}
-										})
-									}
-								})
+								if obj.Get("schema") != nil && obj.Get("schema").Get("properties") != nil {
+									obj.Get("schema").Get("properties").GetObject().Visit(func(k []byte, v *fastjson.Value) {
+										propName := string(k)
+										propType := string(v.GetStringBytes("type"))
+										if propName != "" && propType != "" {
+											pathWithMetadata.AddParamsValType(path, method, propName, propType)
+										} else {
+											fmt.Printf("incomplete body param. name: '%s', type: '%s'\n", propName, propType)
+										}
+									})
+								}
 							}
 						}
 					})
