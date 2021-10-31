@@ -29,6 +29,13 @@ func main() {
 	flag.StringVar(&matchMethod, "mm", "", "only print requests matching http method")
 	flag.Var(&fwdFlag, "fwd-flag", "forward flag straight to the output command")
 	flag.Var(&fwdFlag, "ff", "forward flag straight to the output command")
+	flag.Usage = func() {
+		fmt.Printf("Available flags:\n" +
+			"  -o / -output			Output format. Supported: curl (default), ffuf\n" +
+			"  -ms / -match-substring	Print only results matching substring\n" +
+			"  -mm / -match-method		Print only results matching HTTP method\n" +
+			"  -ff / -fwd-flag		Forward flag directly to results\n")
+	}
 	flag.Parse()
 
 	sc := bufio.NewScanner(os.Stdin)
